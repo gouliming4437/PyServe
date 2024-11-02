@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Welcome to the Intranet Site</h1>
+        <nav class="category-menu">
+            <ul>
+                {{ menu_html }}
+            </ul>
+        </nav>
+    </header>
+    <div class="search-bar">
+        <form action="/search" method="get">
+            <input type="text" name="q" placeholder="Search for pages...">
+            <button type="submit">Search</button>
+        </form>
+    </div>
+    <h2>Page Classification</h2>
+    <ul>
+        {% for page in pages %}
+            <li>
+                <strong>{{ page.title }}</strong> - {{ page.classification }}
+                [<a href="/page/{{ page.filename }}">View Page</a>]
+            </li>
+        {% endfor %}
+    </ul>
+    <footer>
+        <p>&copy; 2023 Intranet Site</p>
+    </footer>
+</body>
+</html> 

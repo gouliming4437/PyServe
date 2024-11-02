@@ -1,0 +1,1 @@
+CreateObject("Wscript.Shell").Run """" & "C:\path\to\start_intranet_server.bat" & """", 0, False

@@ -1,0 +1,11 @@
+# Navigate to your project directory
+cd intranet_site
+
+# Create a virtual environment using Python 3.8
+python3.8 -m venv venv
+
+# Activate the virtual environment
+venv\Scripts\activate
+
+# Install the dependencies
+pip install -r requirements.txt 

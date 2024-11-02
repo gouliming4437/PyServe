@@ -1,0 +1,297 @@
+/* Reset some basic elements for consistency across browsers */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Body Styling */
+body {
+    font-family: 'Microsoft YaHei', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    line-height: 1.6;
+    padding: 20px;
+}
+
+/* Header Styling */
+header {
+    background-color: #4a90e2;
+    color: #fff;
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+header h1 {
+    font-size: 2.5em;
+}
+
+/* Search Bar Styling */
+.search-bar {
+    max-width: 800px;
+    margin: 0 auto 20px auto;
+    display: flex;
+    justify-content: center;
+}
+
+.search-bar input[type="text"] {
+    width: 70%;
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px 0 0 4px;
+    font-size: 1em;
+    outline: none;
+}
+
+.search-bar button {
+    padding: 10px 20px;
+    border: none;
+    background-color: #4a90e2;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 0 4px 4px 0;
+    font-size: 1em;
+    transition: background-color 0.3s ease;
+}
+
+.search-bar button:hover {
+    background-color: #357ABD;
+}
+
+/* Page Classification List */
+h2 {
+    color: #4a90e2;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+ul {
+    list-style-type: none;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+li {
+    background: #fff;
+    margin: 10px 0;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+li:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+li strong {
+    font-size: 1.2em;
+    color: #333;
+}
+
+li a {
+    color: #4a90e2;
+    text-decoration: none;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+li a:hover {
+    text-decoration: underline;
+}
+
+/* Search Results Styling */
+.results {
+    max-width: 800px;
+    margin: 20px auto;
+}
+
+.results li {
+    background: #fff;
+    margin: 10px 0;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.results li:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Footer Styling */
+footer {
+    text-align: center;
+    margin-top: 30px;
+    color: #777;
+}
+
+footer a {
+    color: #4a90e2;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .search-bar {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .search-bar input[type="text"], .search-bar button {
+        width: 100%;
+        border-radius: 4px;
+        margin: 5px 0;
+    }
+
+    header h1 {
+        font-size: 2em;
+    }
+}
+
+/* Category Menu Styling */
+.category-menu {
+    background-color: #357ABD;
+    padding: 10px 0;
+    margin-top: 20px;
+    border-radius: 4px;
+}
+
+.category-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.category-menu li {
+    margin: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.category-menu li:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.category-menu a {
+    color: white;
+    text-decoration: none;
+    padding: 8px 15px;
+    margin: 0 5px;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.category-menu a:hover {
+    background-color: #4a90e2;
+    text-decoration: none;
+}
+
+/* Responsive adjustments for the menu */
+@media (max-width: 768px) {
+    .category-menu ul {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .category-menu li {
+        margin: 5px 0;
+    }
+}
+
+/* Add this to your existing CSS */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Add these to your existing category menu styles */
+.category-menu a.active {
+    background-color: #4a90e2;
+    font-weight: bold;
+}
+
+.category-menu a:hover {
+    background-color: #4a90e2;
+    text-decoration: none;
+}
+
+/* Add these to your existing CSS */
+.attachment {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+    margin: 10px 0;
+    display: inline-block;
+}
+
+.attachment a {
+    display: flex;
+    align-items: center;
+    color: #333;
+    text-decoration: none;
+}
+
+.attachment a:hover {
+    color: #4a90e2;
+}
+
+.file-icon {
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+}
+
+/* Content Styling */
+.page-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.page-content h1, 
+.page-content h2, 
+.page-content h3 {
+    text-align: center;
+    color: #4a90e2;
+    margin: 20px 0;
+}
+
+.page-content p {
+    text-align: center;
+    margin: 15px 0;
+}
+
+.page-content .attachment {
+    text-align: center;
+    display: block;
+}
+
+.page-content .attachment a {
+    justify-content: center;
+}
+
+/* List items in content should remain left-aligned for better readability */
+.page-content ul, 
+.page-content ol {
+    text-align: left;
+    padding-left: 20px;
+}

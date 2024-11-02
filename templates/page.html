@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - Intranet Site</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>{{ title }}</h1>
+        <nav class="category-menu">
+            <ul>
+                {{ menu_html }}
+            </ul>
+        </nav>
+    </header>
+    <div class="search-bar">
+        <form action="/search" method="get">
+            <input type="text" name="q" placeholder="Search for pages...">
+            <button type="submit">Search</button>
+        </form>
+    </div>
+    <div class="page-content">
+        <p>Classification: {{ classification }}</p>
+        {{ content }}
+    </div>
+    <footer>
+        <a href="/">← Back to Home</a>
+        <p>&copy; 2023 Intranet Site</p>
+    </footer>
+</body>
+</html> 
