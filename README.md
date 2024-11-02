@@ -4,7 +4,7 @@ A simple utility to launch and manage a Python server using Windows scripts, des
 
 ## Overview
 
-This project provides scripts to start and manage a Python server in the background using Windows batch and VBScript files. It's specifically designed for intranet environments and uses only Python standard libraries to ensure maximum compatibility without external dependencies.
+This project provides scripts to start and manage a Python server in the background using Windows batch and VBScript files. It's specifically designed for intranet environments and uses only Python standard libraries to ensure maximum compatibility without external dependencies. **8000 is the port number, you can change it to any other port number in the server.py file.**
 
 ## Requirements
 
@@ -19,6 +19,8 @@ No additional Python packages are required as this project only uses standard li
 - `start_server.bat` - Batch script to initialize and start the Python server. you need to edit the script to point to the correct Python interpreter and the server script.
 - `start_hidden.vbs` - VBScript to run the server process in the background. you need to edit the script to point to the right path of the start_server.bat script.
 - `README.md` - Project documentation (this file)
+- `pages` - This folder contains the markdown files that will be displayed on the intranet.
+- `example.md` - This is an example of a markdown file that you can use as a template for your own pages. for images and links, you can use the relative path from the `static` folder, and the format of these files please refer to the tech_python.md file.
 
 ## Usage
 
@@ -41,3 +43,7 @@ This server is designed to run in an intranet environment. It doesn't require in
 ## Contributing
 
 Feel free to open issues or submit pull requests if you have suggestions for improvements.
+
+## release note
+
+- 2024-11-02: initial release

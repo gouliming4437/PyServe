@@ -41,12 +41,27 @@ def parse_front_matter(content):
                         else:  # If it's a key for a list
                             current_key = key
                             current_list = []
+                            metadata[current_key] = current_list
                     elif line.startswith('-') and current_key:
                         # Handle list items
-                        value = line[1:].strip().strip('"').strip("'")  # Remove quotes if present
-                        current_list.append(value)
-                        metadata[current_key] = current_list
-                        
+                        value = line[1:].strip().strip('"').strip("'")
+                        if current_key == 'classification':
+                            if '>' in value:  # Format: "MainCategory > SubCategory"
+                                main_cat, sub_cat = [x.strip() for x in value.split('>')]
+                                if 'classifications' not in metadata:
+                                    metadata['classifications'] = {}
+                                if main_cat not in metadata['classifications']:
+                                    metadata['classifications'][main_cat] = []
+                                metadata['classifications'][main_cat].append(sub_cat)
+                            else:
+                                # Handle single category without subcategory
+                                if 'classifications' not in metadata:
+                                    metadata['classifications'] = {}
+                                if value not in metadata['classifications']:
+                                    metadata['classifications'][value] = []
+                        else:
+                            current_list.append(value)
+                
                 return metadata, body
             except ValueError:
                 return {}, content
@@ -146,6 +161,38 @@ def render_template(template_content, **kwargs):
     
     return template_content
 
+# Add this function before the IntranetHandler class
+def collect_classifications():
+    classifications_hierarchy = {}
+    for filename in os.listdir(PAGES_DIR):
+        if filename.endswith('.md'):
+            filepath = os.path.join(PAGES_DIR, filename)
+            try:
+                content = None
+                for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
+                    try:
+                        with open(filepath, 'r', encoding=encoding) as f:
+                            content = f.read()
+                            metadata, _ = parse_front_matter(content)
+                            if 'classifications' in metadata:
+                                for main_cat, sub_cats in metadata['classifications'].items():
+                                    if main_cat not in classifications_hierarchy:
+                                        classifications_hierarchy[main_cat] = set()
+                                    if sub_cats:  # If there are subcategories
+                                        classifications_hierarchy[main_cat].update(sub_cats)
+                                    else:  # If it's a standalone category
+                                        classifications_hierarchy[main_cat] = set()
+                            break
+                    except UnicodeDecodeError:
+                        continue
+                if content is None:
+                    print(f"Failed to decode file {filename} with any encoding")
+                    continue
+            except Exception as e:
+                print(f"Error reading file {filename}: {str(e)}")
+                continue
+    return classifications_hierarchy
+
 class IntranetHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
@@ -167,51 +214,52 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
     def handle_index(self):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
-        selected_category = query.get('category', [None])[0]  # Get selected category from URL
+        selected_category = query.get('category', [None])[0]
+        selected_subcategory = query.get('subcategory', [None])[0]
+        
         if selected_category:
-            selected_category = unquote(selected_category)  # Decode URL-encoded category
+            selected_category = unquote(selected_category)
+        if selected_subcategory:
+            selected_subcategory = unquote(selected_subcategory)
         
-        pages = []
-        all_classifications = set()  # To collect unique classifications
+        # Get classifications hierarchy
+        classifications_hierarchy = collect_classifications()
+
+        # Generate menu HTML with Home link first
+        menu_html = ['<li><a href="/">Home</a></li>']
         
-        # First pass: collect all unique classifications
-        for filename in os.listdir(PAGES_DIR):
-            if filename.endswith('.md'):
-                filepath = os.path.join(PAGES_DIR, filename)
-                try:
-                    # Try different encodings
-                    content = None
-                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
-                        try:
-                            with open(filepath, 'r', encoding=encoding) as f:
-                                content = f.read()
-                                metadata, _ = parse_front_matter(content)
-                                classifications = metadata.get('classification', ['General'])
-                                all_classifications.update(classifications)
-                                break  # If successful, break the encoding loop
-                        except UnicodeDecodeError:
-                            continue  # Try next encoding
-                    if content is None:
-                        print(f"Failed to decode file {filename} with any encoding")
-                        continue
-                except Exception as e:
-                    print(f"Error reading file {filename}: {str(e)}")
-                    continue
-        
-        # Sort classifications for consistent display
-        menu_items = sorted(list(all_classifications))
-        menu_html = []
-        for item in menu_items:
-            active_class = 'active' if item == selected_category else ''
-            menu_html.append(f'<li><a href="/?category={item}" class="{active_class}">{item}</a></li>')
-        
+        # Add menu items for each category
+        for main_cat, sub_cats in sorted(classifications_hierarchy.items()):
+            # Determine if this category is active
+            is_active = main_cat == selected_category
+            active_class = ' active' if is_active else ''
+            
+            # Create dropdown menu
+            sub_menu = []
+            for sub_cat in sorted(sub_cats):
+                # Determine if this subcategory is active
+                sub_active_class = ' active' if sub_cat == selected_subcategory else ''
+                sub_menu.append(
+                    f'<li><a href="/?category={main_cat}&subcategory={sub_cat}" '
+                    f'class="{sub_active_class}">{sub_cat}</a></li>'
+                )
+            
+            # Add the category with its dropdown
+            menu_html.append(f'''
+                <li class="dropdown">
+                    <a href="/?category={main_cat}" class="dropbtn{active_class}">{main_cat}</a>
+                    <ul class="dropdown-content">
+                        {' '.join(sub_menu)}
+                    </ul>
+                </li>
+            ''')
+
         # Second pass: collect pages
         pages_data = []
         for filename in os.listdir(PAGES_DIR):
             if filename.endswith('.md'):
                 filepath = os.path.join(PAGES_DIR, filename)
                 try:
-                    # Try different encodings
                     content = None
                     for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
                         try:
@@ -219,11 +267,37 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                                 content = f.read()
                                 metadata, _ = parse_front_matter(content)
                                 title = metadata.get('title', filename.replace('.md', ''))
-                                classifications = metadata.get('classification', ['General'])
                                 
-                                # Only include pages that match the selected category
-                                if not selected_category or selected_category in classifications:
-                                    classification_text = ', '.join(classifications)
+                                # Check if page matches selected category/subcategory
+                                should_include = True
+                                if selected_category:
+                                    if 'classifications' in metadata:
+                                        matches = False
+                                        for main_cat, sub_cats in metadata['classifications'].items():
+                                            if main_cat == selected_category:
+                                                if selected_subcategory:
+                                                    matches = selected_subcategory in sub_cats
+                                                else:
+                                                    matches = True
+                                                break
+                                        should_include = matches
+                                    else:
+                                        should_include = False
+                                
+                                if should_include:
+                                    # Format classifications for display
+                                    if 'classifications' in metadata:
+                                        formatted_classifications = []
+                                        for main_cat, sub_cats in metadata['classifications'].items():
+                                            if sub_cats:  # If there are subcategories
+                                                for sub_cat in sub_cats:
+                                                    formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                                            else:  # If it's a standalone category
+                                                formatted_classifications.append(main_cat)
+                                        classification_text = ', '.join(formatted_classifications)
+                                    else:
+                                        classification_text = 'General'
+                                    
                                     base_filename = os.path.splitext(filename)[0]
                                     pages_data.append({
                                         'title': title,
@@ -240,10 +314,6 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                     print(f"Error reading file {filename}: {str(e)}")
                     continue
 
-        # Add "All Categories" option to the menu
-        all_categories_class = 'active' if not selected_category else ''
-        menu_html.insert(0, f'<li><a href="/" class="{all_categories_class}">All Categories</a></li>')
-        
         # Read and render the template
         template = read_template('index.html')
         html_content = render_template(template,
@@ -256,34 +326,24 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         self.respond_with_html(html_content)
 
     def handle_page(self, name):
-        # Collect all unique classifications first
-        all_classifications = set()
-        for filename in os.listdir(PAGES_DIR):
-            if filename.endswith('.md'):
-                filepath = os.path.join(PAGES_DIR, filename)
-                try:
-                    # Try different encodings
-                    content = None
-                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
-                        try:
-                            with open(filepath, 'r', encoding=encoding) as f:
-                                content = f.read()
-                                metadata, _ = parse_front_matter(content)
-                                classifications = metadata.get('classification', ['General'])
-                                all_classifications.update(classifications)
-                                break  # If successful, break the encoding loop
-                        except UnicodeDecodeError:
-                            continue
-                    if content is None:
-                        print(f"Failed to decode file {filename} with any encoding")
-                        continue
-                except Exception as e:
-                    print(f"Error reading file {filename}: {str(e)}")
-                    continue
+        # Get classifications hierarchy
+        classifications_hierarchy = collect_classifications()
         
-        # Sort classifications for consistent display
-        menu_items = sorted(list(all_classifications))
-        menu_html = ''.join([f'<li><a href="/?category={item}">{item}</a></li>' for item in menu_items])
+        # Generate menu HTML with Home link first
+        menu_html = ['<li><a href="/">Home</a></li>']
+        for main_cat, sub_cats in sorted(classifications_hierarchy.items()):
+            sub_menu = ''.join([
+                f'<li><a href="/?category={main_cat}&subcategory={sub_cat}">{sub_cat}</a></li>'
+                for sub_cat in sorted(sub_cats)
+            ])
+            menu_html.append(f'''
+                <li class="dropdown">
+                    <a href="/?category={main_cat}" class="dropbtn">{main_cat}</a>
+                    <ul class="dropdown-content">
+                        {sub_menu}
+                    </ul>
+                </li>
+            ''')
 
         # Handle the current page
         filename = f"{name}.md"
@@ -309,15 +369,28 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             metadata, body = parse_front_matter(content)
             html_content = markdown_to_html(body)
             
-            classifications = metadata.get('classification', ['General'])
-            classification_text = ', '.join(classifications)
+            # Get title from metadata or use filename
             title = metadata.get('title', name)
+            
+            # Format classifications
+            classification_text = ""
+            if 'classifications' in metadata:
+                formatted_classifications = []
+                for main_cat, sub_cats in metadata['classifications'].items():
+                    if sub_cats:  # If there are subcategories
+                        for sub_cat in sub_cats:
+                            formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                    else:  # If it's a standalone category
+                        formatted_classifications.append(main_cat)
+                classification_text = ', '.join(formatted_classifications)
+            else:
+                classification_text = 'General'
             
             # Read and render the template
             template = read_template('page.html')
             html_content = render_template(template,
                 title=title,
-                menu_html=menu_html,
+                menu_html=''.join(menu_html),
                 classification=classification_text,
                 content=html_content
             )

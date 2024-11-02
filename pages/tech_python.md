@@ -1,8 +1,8 @@
 ---
 title: Python Programming
 classification:
-  - Technology
-  - Programming
+  - Technology > Python
+  - Programming > Python
 ---
 # Python Programming
 
