@@ -1,7 +1,7 @@
 ---
-title: 园艺技巧
+title: 园艺技巧2
 classification:
-  - Lifestyle
+  - Lifestyle > 园艺
   - Gardening
 ---
 # 园艺技巧
