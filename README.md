@@ -46,4 +46,6 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 
 ## release note
 
-- 2024-11-02: initial release
+- v1.0 2024-11-02: Initial release.
+
+- v1.1 2024-11-02: Added support for two-level classification tags and created example.md as a template for posts.
