@@ -49,3 +49,5 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 - v1.0 2024-11-02: Initial release.
 
 - v1.1 2024-11-02: Added support for two-level classification tags and created example.md as a template for posts.
+
+- v1.2 2024-11-03: Added support to handle multiple users and added footer and navigation menu, and improved the template engine to support more complex templates.
