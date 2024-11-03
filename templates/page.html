@@ -21,12 +21,12 @@
         </form>
     </div>
     <div class="page-content">
+        <div class="breadcrumb">
+            <a href="/">Home</a> > {{ title }}
+        </div>
         <p>Classification: {{ classification }}</p>
         {{ content }}
     </div>
-    <footer>
-        <a href="/">← Back to Home</a>
-        <p>&copy; 2023 Intranet Site</p>
-    </footer>
+    {{ footer }}
 </body>
 </html> 

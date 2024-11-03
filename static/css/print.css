@@ -1,0 +1,11 @@
+@media print {
+    .navigation, .search-bar, .footer {
+        display: none;
+    }
+    body {
+        font-size: 12pt;
+    }
+    a[href]:after {
+        content: " (" attr(href) ")";
+    }
+} 

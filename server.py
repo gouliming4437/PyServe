@@ -1,7 +1,9 @@
 import http.server
 import socketserver
+from socketserver import ThreadingMixIn
 import os
 from urllib.parse import urlparse, parse_qs, unquote
+import os.path, time
 
 PORT = 8000
 
@@ -72,30 +74,48 @@ def parse_front_matter(content):
 
 # Basic Markdown to HTML converter
 def markdown_to_html(markdown_text):
-    html = ""
+    toc = []
+    html = []
+    header_count = 0  # Counter for headers
+    
     for line in markdown_text.split('\n'):
+        if line.startswith('# ') or line.startswith('## ') or line.startswith('### '):
+            header_count += 1  # Increment counter for each header
+            
         if line.startswith('# '):
-            html += f"<h1>{line[2:].strip()}</h1>\n"
+            # H1 header
+            title = line[2:].strip()
+            anchor = title.lower()
+            toc.append(f"<li><a href='#{anchor}'>{title}</a></li>")
+            html.append(f"<h1 id='{anchor}'>{title}</h1>\n")
         elif line.startswith('## '):
-            html += f"<h2>{line[3:].strip()}</h2>\n"
+            # H2 header
+            title = line[3:].strip()
+            anchor = title.lower()
+            toc.append(f"<li style='margin-left: 20px'><a href='#{anchor}'>{title}</a></li>")
+            html.append(f"<h2 id='{anchor}'>{title}</h2>\n")
         elif line.startswith('### '):
-            html += f"<h3>{line[4:].strip()}</h3>\n"
+            # H3 header
+            title = line[4:].strip()
+            anchor = title.lower()
+            toc.append(f"<li style='margin-left: 40px'><a href='#{anchor}'>{title}</a></li>")
+            html.append(f"<h3 id='{anchor}'>{title}</h3>\n")
         elif line.startswith('!['):
             # Handle image syntax: ![alt text](image_url)
             try:
                 alt_text = line[2:].split('](')[0]
                 image_url = line.split('](')[1].strip(')')
-                html += f'<img src="{image_url}" alt="{alt_text}" style="cursor: pointer;" onclick="window.open(this.src)">\n'
+                html.append(f'<img src="{image_url}" alt="{alt_text}" style="cursor: pointer;" onclick="window.open(this.src)">\n')
             except:
-                html += f"<p>{line}</p>\n"
+                html.append(f"<p>{line}</p>\n")
         elif '[file:' in line:
             # Handle file attachment syntax: [file:filename](path/to/file)
             try:
                 file_name = line.split('[file:')[1].split('](')[0]
                 file_path = line.split('](')[1].strip(')')
-                html += f'<p class="attachment"><a href="{file_path}" target="_blank"><img src="/static/images/file-icon.png" class="file-icon" alt="File">{file_name}</a></p>\n'
+                html.append(f'<p class="attachment"><a href="{file_path}" target="_blank"><img src="/static/images/file-icon.png" class="file-icon" alt="File">{file_name}</a></p>\n')
             except:
-                html += f"<p>{line}</p>\n"
+                html.append(f"<p>{line}</p>\n")
         elif '[' in line and '](' in line:
             # Handle normal links: [text](url)
             try:
@@ -112,12 +132,20 @@ def markdown_to_html(markdown_text):
                             html_line += f'<a href="{link_url}">{link_text}</a>{remaining}'
                     else:
                         html_line += '[' + part
-                html += f"<p>{html_line}</p>\n"
+                html.append(f"<p>{html_line}</p>\n")
             except:
-                html += f"<p>{line}</p>\n"
+                html.append(f"<p>{line}</p>\n")
         else:
-            html += f"<p>{line}</p>\n"
-    return html
+            html.append(f"<p>{line}</p>\n")
+    
+    # Only add TOC if there are at least 3 headers
+    if toc and header_count >= 3:
+        toc_html = "<div class='table-of-contents'>\n<h2>Table of Contents</h2>\n<ul>\n"
+        toc_html += "\n".join(toc)
+        toc_html += "\n</ul>\n</div>\n"
+        html.insert(0, toc_html)  # Insert at the beginning of content
+    
+    return "\n".join(html)
 
 def read_template(template_name):
     """Read and return the content of a template file."""
@@ -131,33 +159,75 @@ def read_template(template_name):
 
 def render_template(template_content, **kwargs):
     """Replace placeholders in template with actual values."""
-    # Handle for loops first
-    if 'pages' in kwargs and isinstance(kwargs['pages'], list):
-        # Find the for loop section
-        start = template_content.find('{% for page in pages %}')
-        end = template_content.find('{% endfor %}')
-        if start != -1 and end != -1:
-            # Get the template inside the loop
-            loop_template = template_content[start + len('{% for page in pages %}'):end]
-            # Generate HTML for each page
-            pages_html = ''
-            for page in kwargs['pages']:
-                page_content = loop_template
-                for key, value in page.items():
-                    placeholder = '{{ page.' + key + ' }}'
-                    page_content = page_content.replace(placeholder, str(value))
-                pages_html += page_content
-            # Replace the entire for loop section with the generated HTML
-            template_content = (
-                template_content[:start] + 
-                pages_html + 
-                template_content[end + len('{% endfor %}'):]
-            )
+    # Handle if conditions first
+    if '{% if' in template_content:
+        while '{% if' in template_content:
+            start = template_content.find('{% if')
+            end = template_content.find('{% endif %}') + 9
+            if_block = template_content[start:end]
+            condition = if_block[if_block.find('if')+2:if_block.find('%}')].strip()
+            content = if_block[if_block.find('%}')+2:if_block.find('{% endif %}')]
+            
+            # Evaluate condition
+            try:
+                var_name = condition.split()[0]
+                if '!=' in condition:
+                    var_name = condition.split('!=')[0].strip()
+                    compare_value = condition.split('!=')[1].strip().strip("'").strip('"')
+                    should_show = kwargs.get(var_name) and kwargs[var_name] != compare_value
+                else:
+                    should_show = kwargs.get(var_name)
+                
+                template_content = template_content.replace(if_block, content if should_show else '')
+            except:
+                template_content = template_content.replace(if_block, '')
+
+    # Handle for loops
+    while '{% for' in template_content:
+        start = template_content.find('{% for')
+        end = template_content.find('{% endfor %}') + 12  # Changed to 12 to include full endfor tag
+        loop_block = template_content[start:end]
+        
+        # Parse loop parameters
+        loop_def = loop_block[loop_block.find('for')+3:loop_block.find('%}')].strip()
+        item_name = loop_def.split()[0]
+        collection_name = loop_def.split()[-1]
+        
+        # Get loop content template
+        loop_content = loop_block[loop_block.find('%}')+2:loop_block.find('{% endfor %}')]
+        
+        # Get the collection from kwargs
+        collection = kwargs.get(collection_name, [])
+        
+        # Generate content for each item
+        generated_content = []
+        for item in collection:
+            item_content = loop_content
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    placeholder = '{{ ' + f"{item_name}.{key}" + ' }}'
+                    item_content = item_content.replace(placeholder, str(value))
+            else:
+                placeholder = '{{ ' + item_name + ' }}'
+                item_content = item_content.replace(placeholder, str(item))
+            generated_content.append(item_content)
+        
+        # Replace the entire loop block with generated content
+        template_content = template_content.replace(loop_block, ''.join(generated_content))
 
     # Handle simple placeholders
     for key, value in kwargs.items():
         placeholder = '{{ ' + key + ' }}'
-        template_content = template_content.replace(placeholder, str(value))
+        if isinstance(value, str):
+            # Don't escape HTML in template content
+            template_content = template_content.replace(placeholder, value)
+        else:
+            template_content = template_content.replace(placeholder, str(value))
+    
+    # Clean up any remaining template tags
+    template_content = template_content.replace('{% endfor } %}', '')
+    template_content = template_content.replace('{% endfor %}', '')
+    template_content = template_content.replace('%}', '')
     
     return template_content
 
@@ -192,6 +262,33 @@ def collect_classifications():
                 print(f"Error reading file {filename}: {str(e)}")
                 continue
     return classifications_hierarchy
+
+def get_related_pages(classifications, current_page):
+    related = []
+    for filename in os.listdir(PAGES_DIR):
+        if filename.endswith('.md') and filename != current_page:
+            filepath = os.path.join(PAGES_DIR, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    metadata, _ = parse_front_matter(content)
+                    if 'classifications' in metadata:
+                        # If there's any overlap in classifications, add to related
+                        if any(cat in classifications for cat in metadata['classifications']):
+                            title = metadata.get('title', filename.replace('.md', ''))
+                            related.append({
+                                'title': title,
+                                'filename': filename.replace('.md', '')
+                            })
+            except Exception as e:
+                print(f"Error reading related file {filename}: {str(e)}")
+                continue
+    return related
+
+def track_page_versions(filepath):
+    # Store page versions with timestamps
+    # Allow viewing previous versions
+    pass
 
 class IntranetHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -314,13 +411,17 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                     print(f"Error reading file {filename}: {str(e)}")
                     continue
 
+        # Get footer content
+        footer_content = read_template('footer.html')
+        
         # Read and render the template
         template = read_template('index.html')
         html_content = render_template(template,
             title=f"Intranet Site{' - ' + selected_category if selected_category else ''}",
             menu_html=''.join(menu_html),
             pages=pages_data if pages_data else [],
-            category_title=selected_category if selected_category else 'All'
+            category_title=selected_category if selected_category else 'All',
+            footer=footer_content  # Add footer content
         )
         
         self.respond_with_html(html_content)
@@ -386,13 +487,17 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 classification_text = 'General'
             
+            # Get footer content
+            footer_content = read_template('footer.html')
+            
             # Read and render the template
             template = read_template('page.html')
             html_content = render_template(template,
                 title=title,
                 menu_html=''.join(menu_html),
                 classification=classification_text,
-                content=html_content
+                content=html_content,
+                footer=footer_content  # Add footer content
             )
             
             self.respond_with_html(html_content)
@@ -410,41 +515,80 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             if filename.endswith('.md'):
                 filepath = os.path.join(PAGES_DIR, filename)
                 try:
-                    # Try different encodings
                     content = None
                     for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
                         try:
                             with open(filepath, 'r', encoding=encoding) as f:
                                 content = f.read()
-                                if query.lower() in content.lower():
-                                    metadata, _ = parse_front_matter(content)
-                                    title = metadata.get('title', filename.replace('.md', ''))
-                                    classifications = metadata.get('classification', ['General'])
-                                    classification_text = ', '.join(classifications)
+                                metadata, body = parse_front_matter(content)
+                                
+                                # Search in title, content, and classifications
+                                title = metadata.get('title', filename.replace('.md', ''))
+                                if (query.lower() in title.lower() or
+                                    query.lower() in body.lower() or
+                                    query.lower() in str(metadata.get('classifications', '')).lower()):
+                                    
+                                    # Create a content snippet around the matched text
+                                    query_pos = body.lower().find(query.lower())
+                                    start = max(0, query_pos - 100)
+                                    end = min(len(body), query_pos + 100)
+                                    snippet = '...' + body[start:end] + '...' if query_pos != -1 else body[:200] + '...'
+                                    
+                                    # Format classifications
+                                    if 'classifications' in metadata:
+                                        formatted_classifications = []
+                                        for main_cat, sub_cats in metadata['classifications'].items():
+                                            if sub_cats:
+                                                for sub_cat in sub_cats:
+                                                    formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                                            else:
+                                                formatted_classifications.append(main_cat)
+                                        classification_text = ', '.join(formatted_classifications)
+                                    else:
+                                        classification_text = 'General'
+                                    
                                     results.append({
                                         'title': title,
                                         'filename': filename.replace('.md', ''),
+                                        'snippet': snippet,
                                         'classification': classification_text
                                     })
-                                break  # If successful, break the encoding loop
+                                break
                         except UnicodeDecodeError:
                             continue
-                    if content is None:
-                        print(f"Failed to decode file {filename} with any encoding")
-                        continue
                 except Exception as e:
                     print(f"Error reading file {filename}: {str(e)}")
                     continue
 
-        # Build search results HTML
-        results_html = ""
-        if results:
-            for page in results:
-                results_html += f"<li><strong>{page['title']}</strong> - {page['classification']} [<a href='/page/{page['filename']}'>View Page</a>]</li>"
-        else:
-            results_html = "<li>No results found.</li>"
+        # Generate menu HTML for navigation
+        classifications_hierarchy = collect_classifications()
+        menu_html = ['<li><a href="/">Home</a></li>']
+        for main_cat, sub_cats in sorted(classifications_hierarchy.items()):
+            sub_menu = ''.join([
+                f'<li><a href="/?category={main_cat}&subcategory={sub_cat}">{sub_cat}</a></li>'
+                for sub_cat in sorted(sub_cats)
+            ])
+            menu_html.append(f'''
+                <li class="dropdown">
+                    <a href="/?category={main_cat}" class="dropbtn">{main_cat}</a>
+                    <ul class="dropdown-content">
+                        {sub_menu}
+                    </ul>
+                </li>
+            ''')
 
-        html_content = render_template(read_template('search.html'), query=query, results=results_html)
+        # Get footer content
+        footer_content = read_template('footer.html')
+        
+        # Read and render the template
+        template = read_template('search.html')
+        html_content = render_template(template, 
+            query=query,
+            results=results,
+            result_count=len(results),
+            menu_html=''.join(menu_html),
+            footer=footer_content  # Add footer content
+        )
         self.respond_with_html(html_content)
 
     def respond_with_html(self, html_content):
@@ -457,6 +601,18 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         # Override to prevent printing to stderr on each request
         return
 
-with socketserver.TCPServer(("", PORT), IntranetHandler) as httpd:
-    print(f"Serving at port {PORT}")
-    httpd.serve_forever()
+# Create a threaded server class
+class ThreadedHTTPServer(ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True    # Daemon threads exit when the main program exits
+    allow_reuse_address = True   # Allows reuse of address/port
+
+# Replace the original server start code at the bottom of the file with:
+if __name__ == '__main__':
+    try:
+        with ThreadedHTTPServer(("", PORT), IntranetHandler) as httpd:
+            print(f"Server started at port {PORT}")
+            print("Press Ctrl+C to stop the server")
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        httpd.server_close()

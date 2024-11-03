@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Results - {{ query }}</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Search Results</h1>
+        <nav class="category-menu">
+            <ul>
+                {{ menu_html }}
+            </ul>
+        </nav>
+    </header>
+    
+    <div class="search-bar">
+        <form action="/search" method="get">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search for pages...">
+            <button type="submit">Search</button>
+        </form>
+    </div>
+
+    <div class="search-results">
+        <h2>Found {{ result_count }} results for "{{ query }}"</h2>
+        
+        <div class="results-list">
+            {% for result in results %}
+            <div class="search-result">
+                <h3><a href="/page/{{ result.filename }}">{{ result.title }}</a></h3>
+                <p class="classification">{{ result.classification }}</p>
+                <p class="snippet">{{ result.snippet }}</p>
+            </div>
+            {% endfor %}
+            
+            {% if not results %}
+            <p class="no-results">No results found. Try different keywords.</p>
+            {% endif %}
+        </div>
+    </div>
+    {{ footer }}
+</body>
+</html> 
