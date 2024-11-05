@@ -51,3 +51,6 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 - v1.1 2024-11-02: Added support for two-level classification tags and created example.md as a template for posts.
 
 - v1.2 2024-11-03: Added support to handle multiple users and added footer and navigation menu, and improved the template engine to support more complex templates.
+
+- v1.3 2024-11-05: Added support for carousel images, recommended articles, pinned articles, messages display, and recent articles. Added a new template for the home page. Added a new script to generate the pages from markdown files.
+![New template](https://github.com/gouliming4437/omssurgeon/blob/website/website/New%20template.png)
