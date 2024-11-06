@@ -519,3 +519,114 @@ img {
     color: #4a90e2;
     text-decoration: underline;
 }
+
+/* Add these new styles to your existing CSS file */
+
+.two-column-layout {
+    display: flex;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+.left-column {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.right-column {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.message-box {
+    height: 200px;
+    overflow: hidden;
+    position: relative;
+}
+
+#rotating-messages {
+    position: relative;
+}
+
+.message {
+    padding: 20px;
+    text-align: center;
+    display: none;
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
+}
+
+.message.active {
+    display: block;
+}
+
+.view-all {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.view-all a {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #4a90e2;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.view-all a:hover {
+    background-color: #357ABD;
+}
+
+.all-pages {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+@media (max-width: 768px) {
+    .two-column-layout {
+        flex-direction: column;
+    }
+}
+
+/* Add these styles to your existing CSS file */
+
+.all-articles-container {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.articles-list {
+    list-style: none;
+    padding: 0;
+}
+
+.articles-list li {
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.3s ease;
+}
+
+.articles-list li:last-child {
+    border-bottom: none;
+}
+
+.articles-list li:hover {
+    background-color: #f8f9fa;
+}

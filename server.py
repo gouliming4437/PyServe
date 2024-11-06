@@ -4,11 +4,19 @@ from socketserver import ThreadingMixIn
 import os
 from urllib.parse import urlparse, parse_qs, unquote
 import os.path, time
+from operator import itemgetter
+from pathlib import Path
 
 PORT = 8000
 
+# Base content directory
+CONTENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'content')
+
 # Directory where markdown files are stored
-PAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pages')
+PAGES_DIR = os.path.join(CONTENT_DIR, 'pages')
+
+# Directory where message files are stored
+MESSAGES_DIR = os.path.join(CONTENT_DIR, 'messages')
 
 # Directory for static files
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
@@ -290,6 +298,31 @@ def track_page_versions(filepath):
     # Allow viewing previous versions
     pass
 
+def get_file_mtime(filepath):
+    return os.path.getmtime(filepath)
+
+# Add this new function to load messages
+def load_messages():
+    messages = []
+    if os.path.exists(MESSAGES_DIR):
+        for filename in os.listdir(MESSAGES_DIR):
+            if filename.endswith('.txt'):
+                filepath = os.path.join(MESSAGES_DIR, filename)
+                try:
+                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
+                        try:
+                            with open(filepath, 'r', encoding=encoding) as f:
+                                message = f.read().strip()
+                                if message:  # Only add non-empty messages
+                                    messages.append(message)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                except Exception as e:
+                    print(f"Error reading message file {filename}: {str(e)}")
+                    continue
+    return messages if messages else ["Welcome to our Intranet!"]  # Default message if no files found
+
 class IntranetHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
@@ -298,6 +331,8 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == '/':
             self.handle_index()
+        elif path == '/all-articles':
+            self.handle_all_articles()
         elif path.startswith('/page/'):
             page_name = path.split('/page/')[-1]
             self.handle_page(page_name)
@@ -313,6 +348,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         query = parse_qs(parsed_path.query)
         selected_category = query.get('category', [None])[0]
         selected_subcategory = query.get('subcategory', [None])[0]
+        show_all = query.get('view', [''])[0] == 'all'
         
         if selected_category:
             selected_category = unquote(selected_category)
@@ -351,65 +387,56 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                 </li>
             ''')
 
-        # Second pass: collect pages
-        pages_data = []
-        for filename in os.listdir(PAGES_DIR):
-            if filename.endswith('.md'):
-                filepath = os.path.join(PAGES_DIR, filename)
-                try:
-                    content = None
-                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
-                        try:
-                            with open(filepath, 'r', encoding=encoding) as f:
-                                content = f.read()
-                                metadata, _ = parse_front_matter(content)
-                                title = metadata.get('title', filename.replace('.md', ''))
-                                
-                                # Check if page matches selected category/subcategory
-                                should_include = True
-                                if selected_category:
-                                    if 'classifications' in metadata:
-                                        matches = False
-                                        for main_cat, sub_cats in metadata['classifications'].items():
-                                            if main_cat == selected_category:
-                                                if selected_subcategory:
-                                                    matches = selected_subcategory in sub_cats
-                                                else:
-                                                    matches = True
-                                                break
-                                        should_include = matches
-                                    else:
-                                        should_include = False
-                                
-                                if should_include:
-                                    # Format classifications for display
+        # Collect all pages with their modification times
+        all_pages_data = []
+        if os.path.exists(PAGES_DIR):
+            for filename in os.listdir(PAGES_DIR):
+                if filename.endswith('.md'):
+                    filepath = os.path.join(PAGES_DIR, filename)
+                    try:
+                        content = None
+                        for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
+                            try:
+                                with open(filepath, 'r', encoding=encoding) as f:
+                                    content = f.read()
+                                    metadata, _ = parse_front_matter(content)
+                                    title = metadata.get('title', filename.replace('.md', ''))
+                                    
+                                    # Format classifications
                                     if 'classifications' in metadata:
                                         formatted_classifications = []
                                         for main_cat, sub_cats in metadata['classifications'].items():
-                                            if sub_cats:  # If there are subcategories
+                                            if sub_cats:
                                                 for sub_cat in sub_cats:
                                                     formatted_classifications.append(f"{main_cat} > {sub_cat}")
-                                            else:  # If it's a standalone category
+                                            else:
                                                 formatted_classifications.append(main_cat)
                                         classification_text = ', '.join(formatted_classifications)
                                     else:
                                         classification_text = 'General'
                                     
                                     base_filename = os.path.splitext(filename)[0]
-                                    pages_data.append({
+                                    all_pages_data.append({
                                         'title': title,
                                         'classification': classification_text,
-                                        'filename': base_filename
+                                        'filename': base_filename,
+                                        'mtime': get_file_mtime(filepath)
                                     })
-                                break
-                        except UnicodeDecodeError:
-                            continue
-                    if content is None:
-                        print(f"Failed to decode file {filename} with any encoding")
+                                    break
+                            except UnicodeDecodeError:
+                                continue
+                    except Exception as e:
+                        print(f"Error reading file {filename}: {str(e)}")
                         continue
-                except Exception as e:
-                    print(f"Error reading file {filename}: {str(e)}")
-                    continue
+
+        # Sort pages by modification time (newest first)
+        all_pages_data.sort(key=itemgetter('mtime'), reverse=True)
+        
+        # Get recent pages (top 10)
+        recent_pages = all_pages_data[:10]
+        
+        # Load messages from files
+        messages = load_messages()
 
         # Get footer content
         footer_content = read_template('footer.html')
@@ -419,9 +446,11 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         html_content = render_template(template,
             title=f"Intranet Site{' - ' + selected_category if selected_category else ''}",
             menu_html=''.join(menu_html),
-            pages=pages_data if pages_data else [],
-            category_title=selected_category if selected_category else 'All',
-            footer=footer_content  # Add footer content
+            recent_pages=recent_pages,
+            pages=all_pages_data if show_all else [],
+            show_all_pages=show_all,
+            messages=messages,
+            footer=footer_content
         )
         
         self.respond_with_html(html_content)
@@ -591,6 +620,85 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         )
         self.respond_with_html(html_content)
 
+    def handle_all_articles(self):
+        # Get classifications hierarchy for menu
+        classifications_hierarchy = collect_classifications()
+        
+        # Generate menu HTML
+        menu_html = ['<li><a href="/">Home</a></li>']
+        for main_cat, sub_cats in sorted(classifications_hierarchy.items()):
+            sub_menu = []
+            for sub_cat in sorted(sub_cats):
+                sub_menu.append(
+                    f'<li><a href="/?category={main_cat}&subcategory={sub_cat}">{sub_cat}</a></li>'
+                )
+            menu_html.append(f'''
+                <li class="dropdown">
+                    <a href="/?category={main_cat}" class="dropbtn">{main_cat}</a>
+                    <ul class="dropdown-content">
+                        {' '.join(sub_menu)}
+                    </ul>
+                </li>
+            ''')
+
+        # Collect all pages with their modification times
+        all_pages_data = []
+        for filename in os.listdir(PAGES_DIR):
+            if filename.endswith('.md'):
+                filepath = os.path.join(PAGES_DIR, filename)
+                try:
+                    content = None
+                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
+                        try:
+                            with open(filepath, 'r', encoding=encoding) as f:
+                                content = f.read()
+                                metadata, _ = parse_front_matter(content)
+                                title = metadata.get('title', filename.replace('.md', ''))
+                                
+                                # Format classifications
+                                if 'classifications' in metadata:
+                                    formatted_classifications = []
+                                    for main_cat, sub_cats in metadata['classifications'].items():
+                                        if sub_cats:
+                                            for sub_cat in sub_cats:
+                                                formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                                        else:
+                                            formatted_classifications.append(main_cat)
+                                    classification_text = ', '.join(formatted_classifications)
+                                else:
+                                    classification_text = 'General'
+                                
+                                base_filename = os.path.splitext(filename)[0]
+                                all_pages_data.append({
+                                    'title': title,
+                                    'classification': classification_text,
+                                    'filename': base_filename,
+                                    'mtime': get_file_mtime(filepath)
+                                })
+                                break
+                        except UnicodeDecodeError:
+                            continue
+                except Exception as e:
+                    print(f"Error reading file {filename}: {str(e)}")
+                    continue
+
+        # Sort pages by modification time (newest first)
+        all_pages_data.sort(key=itemgetter('mtime'), reverse=True)
+        
+        # Get footer content
+        footer_content = read_template('footer.html')
+        
+        # Read and render the template
+        template = read_template('all_articles.html')
+        html_content = render_template(template,
+            title="Intranet Site",
+            menu_html=''.join(menu_html),
+            pages=all_pages_data,
+            footer=footer_content
+        )
+        
+        self.respond_with_html(html_content)
+
     def respond_with_html(self, html_content):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -608,6 +716,10 @@ class ThreadedHTTPServer(ThreadingMixIn, socketserver.TCPServer):
 
 # Replace the original server start code at the bottom of the file with:
 if __name__ == '__main__':
+    # Create necessary directories if they don't exist
+    os.makedirs(PAGES_DIR, exist_ok=True)
+    os.makedirs(MESSAGES_DIR, exist_ok=True)
+    
     try:
         with ThreadedHTTPServer(("", PORT), IntranetHandler) as httpd:
             print(f"Server started at port {PORT}")
