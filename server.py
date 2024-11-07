@@ -331,6 +331,15 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == '/':
             self.handle_index()
+        elif path.startswith('/classification/'):
+            # Handle classification routes
+            parts = path.split('/')[2:]  # Split path and remove empty first element and 'classification'
+            if len(parts) == 2:  # Has both category and subcategory
+                self.handle_classification(parts[0], parts[1])
+            elif len(parts) == 1:  # Has only category
+                self.handle_classification(parts[0])
+            else:
+                self.send_error(404, "Invalid classification path")
         elif path == '/all-articles':
             self.handle_all_articles()
         elif path.startswith('/page/'):
@@ -373,14 +382,14 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                 # Determine if this subcategory is active
                 sub_active_class = ' active' if sub_cat == selected_subcategory else ''
                 sub_menu.append(
-                    f'<li><a href="/?category={main_cat}&subcategory={sub_cat}" '
+                    f'<li><a href="/classification/{main_cat}/{sub_cat}" '
                     f'class="{sub_active_class}">{sub_cat}</a></li>'
                 )
             
             # Add the category with its dropdown
             menu_html.append(f'''
                 <li class="dropdown">
-                    <a href="/?category={main_cat}" class="dropbtn{active_class}">{main_cat}</a>
+                    <a href="/classification/{main_cat}" class="dropbtn{active_class}">{main_cat}</a>
                     <ul class="dropdown-content">
                         {' '.join(sub_menu)}
                     </ul>
@@ -694,6 +703,117 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             title="Intranet Site",
             menu_html=''.join(menu_html),
             pages=all_pages_data,
+            footer=footer_content
+        )
+        
+        self.respond_with_html(html_content)
+
+    def handle_classification(self, category, subcategory=None):
+        # Get classifications hierarchy for menu
+        classifications_hierarchy = collect_classifications()
+        
+        # Generate menu HTML
+        menu_html = ['<li><a href="/">Home</a></li>']
+        for main_cat, sub_cats in sorted(classifications_hierarchy.items()):
+            is_active = main_cat == category
+            active_class = ' active' if is_active else ''
+            
+            sub_menu = []
+            for sub_cat in sorted(sub_cats):
+                sub_active_class = ' active' if sub_cat == subcategory else ''
+                sub_menu.append(
+                    f'<li><a href="/classification/{main_cat}/{sub_cat}" '
+                    f'class="{sub_active_class}">{sub_cat}</a></li>'
+                )
+            
+            menu_html.append(f'''
+                <li class="dropdown">
+                    <a href="/classification/{main_cat}" class="dropbtn{active_class}">{main_cat}</a>
+                    <ul class="dropdown-content">
+                        {' '.join(sub_menu)}
+                    </ul>
+                </li>
+            ''')
+
+        # Collect filtered pages
+        filtered_pages = []
+        for filename in os.listdir(PAGES_DIR):
+            if filename.endswith('.md'):
+                filepath = os.path.join(PAGES_DIR, filename)
+                try:
+                    content = None
+                    for encoding in ['utf-8-sig', 'utf-8', 'gb18030']:
+                        try:
+                            with open(filepath, 'r', encoding=encoding) as f:
+                                content = f.read()
+                                metadata, _ = parse_front_matter(content)
+                                
+                                # Check if page matches the category/subcategory filter
+                                if 'classifications' in metadata:
+                                    if subcategory:
+                                        # Check for specific subcategory
+                                        if (category in metadata['classifications'] and 
+                                            subcategory in metadata['classifications'][category]):
+                                            title = metadata.get('title', filename.replace('.md', ''))
+                                            
+                                            # Format classifications
+                                            formatted_classifications = []
+                                            for main_cat, sub_cats in metadata['classifications'].items():
+                                                if sub_cats:
+                                                    for sub_cat in sub_cats:
+                                                        formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                                                else:
+                                                    formatted_classifications.append(main_cat)
+                                            classification_text = ', '.join(formatted_classifications)
+                                            
+                                            filtered_pages.append({
+                                                'title': title,
+                                                'classification': classification_text,
+                                                'filename': filename.replace('.md', ''),
+                                                'mtime': get_file_mtime(filepath)
+                                            })
+                                    else:
+                                        # Check for main category only
+                                        if category in metadata['classifications']:
+                                            title = metadata.get('title', filename.replace('.md', ''))
+                                            
+                                            # Format classifications
+                                            formatted_classifications = []
+                                            for main_cat, sub_cats in metadata['classifications'].items():
+                                                if sub_cats:
+                                                    for sub_cat in sub_cats:
+                                                        formatted_classifications.append(f"{main_cat} > {sub_cat}")
+                                                else:
+                                                    formatted_classifications.append(main_cat)
+                                            classification_text = ', '.join(formatted_classifications)
+                                            
+                                            filtered_pages.append({
+                                                'title': title,
+                                                'classification': classification_text,
+                                                'filename': filename.replace('.md', ''),
+                                                'mtime': get_file_mtime(filepath)
+                                            })
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                except Exception as e:
+                    print(f"Error reading file {filename}: {str(e)}")
+                    continue
+
+        # Sort pages by modification time (newest first)
+        filtered_pages.sort(key=itemgetter('mtime'), reverse=True)
+        
+        # Get footer content
+        footer_content = read_template('footer.html')
+        
+        # Read and render the template
+        template = read_template('classification.html')
+        html_content = render_template(template,
+            title="Intranet Site",
+            category=category,
+            subcategory_title=f" > {subcategory}" if subcategory else "",
+            menu_html=''.join(menu_html),
+            filtered_pages=filtered_pages,
             footer=footer_content
         )
         
