@@ -61,4 +61,4 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 
 - v1.4.1 2024-11-07: Fixed the bug that classification menu is not working.
 
-- v1.5 2024-11-08: Added a "Tools" sidebar on the home page; added a surgery scheduling system and a Shedule management system.
+- v1.5 2024-11-08: Added a "Tools" sidebar on the home page; added a surgery scheduling system and a Shcedule management system.
