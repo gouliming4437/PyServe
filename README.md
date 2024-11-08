@@ -60,3 +60,5 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 - v1.4 2024-11-06: Added message display on the home page; added support for markdown syntax; simplified the design of the home page.
 
 - v1.4.1 2024-11-07: Fixed the bug that classification menu is not working.
+
+- v1.5 2024-11-08: Added a "Tools" sidebar on the home page; added a surgery scheduling system and a Shedule management system.
