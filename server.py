@@ -6,6 +6,15 @@ from urllib.parse import urlparse, parse_qs, unquote
 import os.path, time
 from operator import itemgetter
 from pathlib import Path
+import sqlite3
+import hashlib
+from datetime import datetime, timedelta
+import calendar
+import json
+import csv
+import io
+import shutil
+import zipfile
 
 PORT = 8000
 
@@ -20,6 +29,13 @@ MESSAGES_DIR = os.path.join(CONTENT_DIR, 'messages')
 
 # Directory for static files
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+
+# Schedule database file
+SCHEDULE_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'schedule.db')
+
+# Add these constants at the top of the file
+SURGERY_USERNAME = "2466"
+SURGERY_PASSWORD = "2466"
 
 # Function to parse front matter
 def parse_front_matter(content):
@@ -323,6 +339,61 @@ def load_messages():
                     continue
     return messages if messages else ["Welcome to our Intranet!"]  # Default message if no files found
 
+# Add this function to initialize the schedule database
+def init_schedule_db():
+    conn = sqlite3.connect(SCHEDULE_DB)
+    cursor = conn.cursor()
+    
+    # Create Users table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Users (
+            UserID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Username TEXT UNIQUE NOT NULL,
+            Password TEXT NOT NULL
+        )
+    ''')
+    
+    # Create Schedule table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Schedule (
+            ScheduleID INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserID INTEGER NOT NULL,
+            Title TEXT NOT NULL,
+            Description TEXT,
+            DateTime TEXT NOT NULL,
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+        )
+    ''')
+    
+    # Create Surgery Schedule table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS SurgerySchedule (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Department TEXT NOT NULL,
+            Date TEXT NOT NULL,
+            BedNumber TEXT NOT NULL,
+            PatientName TEXT NOT NULL,
+            Gender TEXT NOT NULL,
+            Age INTEGER NOT NULL,
+            HospitalNumber TEXT NOT NULL,
+            Diagnosis TEXT NOT NULL,
+            Operation TEXT NOT NULL,
+            MainSurgeon TEXT NOT NULL,
+            Assistant TEXT NOT NULL,
+            AnesthesiaDoctor TEXT NOT NULL,
+            AnesthesiaType TEXT NOT NULL,
+            PreOpPrep TEXT,
+            OperationOrder INTEGER NOT NULL,
+            Creator TEXT NOT NULL,
+            Editor TEXT NOT NULL,
+            CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
 class IntranetHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
@@ -331,6 +402,14 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == '/':
             self.handle_index()
+        elif path == '/schedule':
+            # First check if we should show login or schedule page
+            self.handle_schedule_page()
+        elif path == '/schedule/login':
+            # Show the login page
+            self.send_file('templates/login.html')
+        elif path == '/api/schedules':
+            self.handle_get_schedules()
         elif path.startswith('/classification/'):
             # Handle classification routes
             parts = path.split('/')[2:]  # Split path and remove empty first element and 'classification'
@@ -348,6 +427,15 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         elif path.startswith('/search'):
             search_query = query.get('q', [''])[0]
             self.handle_search(search_query)
+        elif path == '/surgery':
+            # Direct access to surgery page without login
+            self.handle_surgery_page()
+        elif path == '/api/surgeries':
+            self.handle_get_surgeries()
+        elif path == '/api/surgeries/export':
+            self.handle_export_surgeries()
+        elif path == '/api/surgeries/history':
+            self.handle_get_history()
         else:
             # Let SimpleHTTPRequestHandler handle static files
             super().do_GET()
@@ -819,6 +907,216 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         
         self.respond_with_html(html_content)
 
+    def handle_schedule_login(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = parse_qs(post_data)
+        
+        username = data.get('username', [''])[0]
+        password = data.get('password', [''])[0]
+        
+        if not username or not password:
+            self.send_json({'success': False, 'message': 'Username and password required'})
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        
+        cursor.execute(
+            'SELECT UserID FROM Users WHERE Username=? AND Password=?',
+            (username, hashed_password)
+        )
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            self.send_json({'success': True, 'user_id': user[0]})
+        else:
+            self.send_json({'success': False, 'message': 'Invalid credentials'})
+
+    def handle_schedule_register(self):
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            data = parse_qs(post_data)
+            
+            username = data.get('username', [''])[0]
+            password = data.get('password', [''])[0]
+            
+            if not username or not password:
+                self.send_json({'success': False, 'message': '用户名和密码不能为空'})
+                return
+            
+            # Initialize database connection
+            conn = sqlite3.connect(SCHEDULE_DB)
+            cursor = conn.cursor()
+            
+            try:
+                # Check if username already exists
+                cursor.execute('SELECT UserID FROM Users WHERE Username=?', (username,))
+                if cursor.fetchone():
+                    self.send_json({'success': False, 'message': '用户名已存在'})
+                    return
+                
+                # Hash the password
+                hashed_password = hashlib.sha256(password.encode()).hexdigest()
+                
+                # Insert new user
+                cursor.execute(
+                    "INSERT INTO Users (Username, Password) VALUES (?, ?)",
+                    (username, hashed_password))
+                conn.commit()
+                self.send_json({'success': True, 'message': '注册成功'})
+                
+            except sqlite3.Error as e:
+                print(f"Database error: {e}")
+                self.send_json({'success': False, 'message': '数据库错误'})
+            finally:
+                conn.close()
+                
+        except Exception as e:
+            print(f"Registration error: {e}")
+            self.send_json({'success': False, 'message': f'注册失败: {str(e)}'})
+
+    def handle_get_schedules(self):
+        # Get query parameters
+        params = parse_qs(urlparse(self.path).query)
+        user_id = params.get('user_id', [''])[0]
+        view_type = params.get('view', ['day'])[0]
+        date_str = params.get('date', [datetime.now().strftime('%Y-%m-%d')])[0]
+
+        if not user_id:
+            self.send_json({'success': False, 'message': 'Not logged in'})
+            return
+
+        # Calculate date range
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d')
+        if view_type == 'day':
+            start_date = selected_date
+            end_date = selected_date + timedelta(days=1)
+        elif view_type == 'week':
+            start_date = selected_date - timedelta(days=selected_date.weekday())
+            end_date = start_date + timedelta(days=7)
+        else:  # month
+            start_date = selected_date.replace(day=1)
+            _, last_day = calendar.monthrange(selected_date.year, selected_date.month)
+            end_date = start_date.replace(day=last_day)
+
+        # Get schedules from database
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT ScheduleID, Title, Description, DateTime 
+            FROM Schedule 
+            WHERE UserID=? AND DateTime BETWEEN ? AND ?
+            ORDER BY DateTime
+        ''', (user_id, start_date.strftime('%Y-%m-%d'),
+              end_date.strftime('%Y-%m-%d')))
+        
+        schedules = [{
+            'id': row[0],
+            'title': row[1],
+            'description': row[2],
+            'datetime': row[3]
+        } for row in cursor.fetchall()]
+        
+        conn.close()
+        self.send_json({'success': True, 'schedules': schedules})
+
+    def handle_add_schedule(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = parse_qs(post_data)
+        
+        user_id = data.get('user_id', [''])[0]
+        title = data.get('title', [''])[0]
+        description = data.get('description', [''])[0]
+        datetime_str = data.get('datetime', [''])[0]
+        
+        if not all([user_id, title, datetime_str]):
+            self.send_json({'success': False, 'message': 'Required fields cannot be empty'})
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO Schedule (UserID, Title, Description, DateTime)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, title, description, datetime_str))
+            
+            conn.commit()
+            self.send_json({'success': True, 'message': 'Schedule added successfully'})
+            
+        except Exception as e:
+            self.send_json({'success': False, 'message': str(e)})
+        finally:
+            conn.close()
+
+    def handle_edit_schedule(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = parse_qs(post_data)
+        
+        schedule_id = data.get('schedule_id', [''])[0]
+        user_id = data.get('user_id', [''])[0]
+        title = data.get('title', [''])[0]
+        description = data.get('description', [''])[0]
+        datetime_str = data.get('datetime', [''])[0]
+        
+        if not all([schedule_id, user_id, title, datetime_str]):
+            self.send_json({'success': False, 'message': 'Required fields cannot be empty'})
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE Schedule 
+                SET Title=?, Description=?, DateTime=?
+                WHERE ScheduleID=? AND UserID=?
+            ''', (title, description, datetime_str, schedule_id, user_id))
+            
+            conn.commit()
+            self.send_json({'success': True, 'message': 'Schedule updated successfully'})
+            
+        except Exception as e:
+            self.send_json({'success': False, 'message': str(e)})
+        finally:
+            conn.close()
+
+    def handle_delete_schedule(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = parse_qs(post_data)
+        
+        schedule_id = data.get('schedule_id', [''])[0]
+        user_id = data.get('user_id', [''])[0]
+        
+        if not all([schedule_id, user_id]):
+            self.send_json({'success': False, 'message': 'Required fields cannot be empty'})
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                "DELETE FROM Schedule WHERE ScheduleID=? AND UserID=?",
+                (schedule_id, user_id)
+            )
+            
+            conn.commit()
+            self.send_json({'success': True, 'message': 'Schedule deleted successfully'})
+            
+        except Exception as e:
+            self.send_json({'success': False, 'message': str(e)})
+        finally:
+            conn.close()
+
     def respond_with_html(self, html_content):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -829,17 +1127,434 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         # Override to prevent printing to stderr on each request
         return
 
+    # Add this method to the IntranetHandler class
+    def send_file(self, filename):
+        try:
+            with open(filename, 'rb') as f:
+                content = f.read().decode('utf-8')
+                
+                # Handle template variables for login page
+                if filename.endswith('login.html'):
+                    content = content.replace('{{ request_path }}', self.path)
+                
+                self.send_response(200)
+                if filename.endswith('.html'):
+                    self.send_header('Content-type', 'text/html; charset=utf-8')
+                elif filename.endswith('.js'):
+                    self.send_header('Content-type', 'application/javascript')
+                elif filename.endswith('.css'):
+                    self.send_header('Content-type', 'text/css')
+                self.end_headers()
+                self.wfile.write(content.encode('utf-8'))
+        except FileNotFoundError:
+            self.send_error(404)
+
+    def send_json(self, data):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    # Add this new method to IntranetHandler class
+    def handle_schedule_page(self):
+        # Check if user is logged in by looking for user_id in query parameters
+        params = parse_qs(urlparse(self.path).query)
+        user_id = params.get('user_id', [''])[0]
+        
+        if user_id:
+            # User is logged in, show schedule page
+            self.send_file('templates/schedule.html')
+        else:
+            # User is not logged in, redirect to login page
+            self.send_response(302)  # Temporary redirect
+            self.send_header('Location', '/schedule/login')
+            self.end_headers()
+
+    def handle_surgery_page(self):
+        # Check if user is authenticated
+        params = parse_qs(urlparse(self.path).query)
+        is_authenticated = params.get('auth', [''])[0] == 'true'
+        
+        if is_authenticated:
+            # User is authenticated, show surgery schedule page
+            self.send_file('templates/surgery_schedule.html')
+        else:
+            # User is not authenticated, show login page
+            self.send_file('templates/surgery_login.html')
+
+    def handle_get_surgeries(self):
+        params = parse_qs(urlparse(self.path).query)
+        date = params.get('date', [datetime.now().strftime('%Y-%m-%d')])[0]
+        department = params.get('department', ['二病区'])[0]  # Default to 二病区 for backward compatibility
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT * FROM SurgerySchedule 
+                WHERE Date = ? AND Department = ?
+                ORDER BY OperationOrder
+            ''', (date, department))
+            
+            columns = [description[0] for description in cursor.description]
+            surgeries = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            self.send_json({
+                'success': True,
+                'surgeries': surgeries
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'message': str(e)
+            })
+        finally:
+            conn.close()
+
+    def handle_add_surgery(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = json.loads(post_data)
+        
+        required_fields = ['Department', 'Date', 'BedNumber', 'PatientName', 'Gender', 'Age', 
+                          'HospitalNumber', 'Diagnosis', 'Operation', 'MainSurgeon', 
+                          'Assistant', 'AnesthesiaDoctor', 'AnesthesiaType', 
+                          'OperationOrder', 'Creator']
+        
+        if not all(field in data for field in required_fields):
+            self.send_json({
+                'success': False,
+                'message': '所有必填字段都必须填写'
+            })
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO SurgerySchedule (
+                    Department, Date, BedNumber, PatientName, Gender, Age, HospitalNumber,
+                    Diagnosis, Operation, MainSurgeon, Assistant, AnesthesiaDoctor,
+                    AnesthesiaType, PreOpPrep, OperationOrder, Creator, Editor
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data['Department'], data['Date'], data['BedNumber'], data['PatientName'], 
+                data['Gender'], data['Age'], data['HospitalNumber'], data['Diagnosis'], 
+                data['Operation'], data['MainSurgeon'], data['Assistant'], data['AnesthesiaDoctor'],
+                data['AnesthesiaType'], data.get('PreOpPrep', ''), data['OperationOrder'],
+                data['Creator'], data['Creator']
+            ))
+            
+            conn.commit()
+            self.send_json({
+                'success': True,
+                'message': '手术安排添加成功'
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'message': str(e)
+            })
+        finally:
+            conn.close()
+
+    def handle_edit_surgery(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = json.loads(post_data)
+        
+        if 'ID' not in data:
+            self.send_json({
+                'success': False,
+                'message': '未指定要编辑的手术ID'
+            })
+            return
+        
+        required_fields = ['Date', 'BedNumber', 'PatientName', 'Gender', 'Age', 
+                            'HospitalNumber', 'Diagnosis', 'Operation', 'MainSurgeon', 
+                            'Assistant', 'AnesthesiaDoctor', 'AnesthesiaType', 
+                            'OperationOrder']
+        
+        if not all(field in data for field in required_fields):
+            self.send_json({
+                'success': False,
+                'message': '所有必填字段都必须填写'
+            })
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE SurgerySchedule 
+                SET Date=?, BedNumber=?, PatientName=?, Gender=?, Age=?, 
+                    HospitalNumber=?, Diagnosis=?, Operation=?, MainSurgeon=?, 
+                    Assistant=?, AnesthesiaDoctor=?, AnesthesiaType=?, 
+                    PreOpPrep=?, OperationOrder=?, Editor=?, UpdatedAt=CURRENT_TIMESTAMP
+                WHERE ID=?
+            ''', (
+                data['Date'], data['BedNumber'], data['PatientName'], data['Gender'],
+                data['Age'], data['HospitalNumber'], data['Diagnosis'], data['Operation'],
+                data['MainSurgeon'], data['Assistant'], data['AnesthesiaDoctor'],
+                data['AnesthesiaType'], data.get('PreOpPrep', ''), data['OperationOrder'],
+                data.get('Editor', '系统用户'), data['ID']
+            ))
+            
+            if cursor.rowcount == 0:
+                self.send_json({
+                    'success': False,
+                    'message': '未找到要编辑的手术记录'
+                })
+                return
+            
+            conn.commit()
+            self.send_json({
+                'success': True,
+                'message': '手术安排已更新'
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'message': str(e)
+            })
+        finally:
+            conn.close()
+
+    def handle_delete_surgery(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = json.loads(post_data)
+        
+        if 'id' not in data:
+            self.send_json({
+                'success': False,
+                'message': '未指定要删除的手术ID'
+            })
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('DELETE FROM SurgerySchedule WHERE ID=?', (data['id'],))
+            
+            if cursor.rowcount == 0:
+                self.send_json({
+                    'success': False,
+                    'message': '未找到要删除的手术记录'
+                })
+                return
+            
+            conn.commit()
+            self.send_json({
+                'success': True,
+                'message': '手术安排已删除'
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'message': str(e)
+            })
+        finally:
+            conn.close()
+
+    def handle_export_surgeries(self):
+        params = parse_qs(urlparse(self.path).query)
+        start_date = params.get('start_date', [''])[0]
+        end_date = params.get('end_date', [''])[0]
+        department = params.get('department', [''])[0]
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            query = '''
+                SELECT Date, Department, BedNumber, PatientName, Gender, Age,
+                       HospitalNumber, Diagnosis, Operation, MainSurgeon,
+                       Assistant, AnesthesiaDoctor, AnesthesiaType, PreOpPrep,
+                       OperationOrder
+                FROM SurgerySchedule
+                WHERE Department = ?
+                AND Date BETWEEN ? AND ?
+                ORDER BY Date, OperationOrder
+            '''
+            cursor.execute(query, (department, start_date, end_date))
+            rows = cursor.fetchall()
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            # Write headers
+            writer.writerow(['日期', '病区', '床号', '姓名', '性别', '年龄',
+                           '住院号', '临床诊断', '术式', '主刀',
+                           '助手', '管床医师', '麻醉', '术前准备', '台次'])
+            # Write data
+            writer.writerows(rows)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv')
+            self.send_header('Content-Disposition', 
+                           f'attachment; filename=surgeries_{start_date}_to_{end_date}.csv')
+            self.end_headers()
+            self.wfile.write(output.getvalue().encode('utf-8-sig'))
+            
+        finally:
+            conn.close()
+
+    def handle_backup_database(self):
+        try:
+            # Create backup directory if it doesn't exist
+            backup_dir = os.path.join(os.path.dirname(SCHEDULE_DB), 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # Create backup filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_file = os.path.join(backup_dir, f'schedule_backup_{timestamp}.db')
+            
+            # Create backup
+            shutil.copy2(SCHEDULE_DB, backup_file)
+            
+            # Create zip file
+            zip_file = backup_file + '.zip'
+            with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(backup_file, os.path.basename(backup_file))
+            
+            # Remove the unzipped backup
+            os.remove(backup_file)
+            
+            self.send_json({
+                'success': True,
+                'message': '数据库备份成功',
+                'backup_file': os.path.basename(zip_file)
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'message': f'备份失败: {str(e)}'
+            })
+
+    def handle_get_history(self):
+        params = parse_qs(urlparse(self.path).query)
+        start_date = params.get('start_date', [''])[0]
+        end_date = params.get('end_date', [''])[0]
+        department = params.get('department', [''])[0]
+        
+        if not all([start_date, end_date, department]):
+            self.send_json({
+                'success': False,
+                'message': '请选择日期范围'
+            })
+            return
+        
+        conn = sqlite3.connect(SCHEDULE_DB)
+        cursor = conn.cursor()
+        
+        try:
+            # Get all surgeries within date range for the department
+            cursor.execute('''
+                SELECT * FROM SurgerySchedule 
+                WHERE Department = ? 
+                AND Date BETWEEN ? AND ?
+                ORDER BY Date, OperationOrder
+            ''', (department, start_date, end_date))
+            
+            columns = [description[0] for description in cursor.description]
+            surgeries = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            # Group surgeries by date
+            history_data = {}
+            for surgery in surgeries:
+                date = surgery['Date']
+                if date not in history_data:
+                    history_data[date] = []
+                history_data[date].append(surgery)
+            
+            self.send_json({
+                'success': True,
+                'history': history_data
+            })
+        except Exception as e:
+            print(f"Error getting history: {str(e)}")
+            self.send_json({
+                'success': False,
+                'message': str(e)
+            })
+        finally:
+            conn.close()
+
+    def handle_surgery_login(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = json.loads(post_data)
+        
+        username = data.get('username')
+        password = data.get('password')
+        
+        if username == SURGERY_USERNAME and password == SURGERY_PASSWORD:
+            self.send_json({
+                'success': True,
+                'message': '登录成功'
+            })
+        else:
+            self.send_json({
+                'success': False,
+                'message': '用户名或密码错误'
+            })
+
+    def do_POST(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        
+        if path == '/api/surgery/login':
+            self.handle_surgery_login()
+        elif path == '/api/login':
+            self.handle_schedule_login()
+        elif path == '/api/register':
+            self.handle_schedule_register()
+        elif path == '/api/add_schedule':
+            self.handle_add_schedule()
+        elif path == '/api/edit_schedule':
+            self.handle_edit_schedule()
+        elif path == '/api/delete_schedule':
+            self.handle_delete_schedule()
+        elif path == '/api/change_password':
+            self.handle_change_password()
+        elif path == '/api/delete_account':
+            self.handle_delete_account()
+        elif path == '/api/surgery/add':
+            self.handle_add_surgery()
+        elif path == '/api/surgery/edit':
+            self.handle_edit_surgery()
+        elif path == '/api/surgery/delete':
+            self.handle_delete_surgery()
+        elif path == '/api/database/backup':
+            self.handle_backup_database()
+        else:
+            self.send_error(404)
+
 # Create a threaded server class
 class ThreadedHTTPServer(ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True    # Daemon threads exit when the main program exits
     allow_reuse_address = True   # Allows reuse of address/port
 
-# Replace the original server start code at the bottom of the file with:
-if __name__ == '__main__':
-    # Create necessary directories if they don't exist
+# Add this at the bottom of the file, just before the if __name__ == '__main__': block
+def init():
+    # Create necessary directories
     os.makedirs(PAGES_DIR, exist_ok=True)
     os.makedirs(MESSAGES_DIR, exist_ok=True)
     
+    # Initialize schedule database
+    try:
+        init_schedule_db()
+        print("Schedule database initialized successfully")
+    except Exception as e:
+        print(f"Error initializing schedule database: {e}")
+
+# Update the if __name__ == '__main__': block
+if __name__ == '__main__':
+    init()
     try:
         with ThreadedHTTPServer(("", PORT), IntranetHandler) as httpd:
             print(f"Server started at port {PORT}")

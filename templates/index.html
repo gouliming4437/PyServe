@@ -21,46 +21,60 @@
         </form>
     </div>
     
-    <div class="two-column-layout">
-        <div class="left-column">
-            <h2>Recent Articles</h2>
-            <ul class="recent-articles">
-                {% for page in recent_pages %}
-                    <li>
-                        <strong>{{ page.title }}</strong> - {{ page.classification }}
-                        [<a href="/page/{{ page.filename }}">View Page</a>]
-                    </li>
-                {% endfor %}
-            </ul>
-            <div class="view-all">
-                <a href="/all-articles">View All Articles</a>
-            </div>
-        </div>
-        <div class="right-column">
-            <h2>Messages</h2>
-            <div class="message-box">
-                <div id="rotating-messages">
-                    {% for message in messages %}
-                        <div class="message">{{ message }}</div>
-                    {% endfor %}
+    <div class="main-container">
+        <div class="content-area">
+            <div class="two-column-layout">
+                <div class="left-column">
+                    <h2>Recent Articles</h2>
+                    <ul class="recent-articles">
+                        {% for page in recent_pages %}
+                            <li>
+                                <strong>{{ page.title }}</strong> - {{ page.classification }}
+                                [<a href="/page/{{ page.filename }}">View Page</a>]
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="view-all">
+                        <a href="/all-articles">View All Articles</a>
+                    </div>
+                </div>
+                <div class="right-column">
+                    <h2>Messages</h2>
+                    <div class="message-box">
+                        <div id="rotating-messages">
+                            {% for message in messages %}
+                                <div class="message">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
             </div>
+            
+            {% if show_all_pages %}
+            <div class="all-pages">
+                <h2>All Articles</h2>
+                <ul>
+                    {% for page in pages %}
+                        <li>
+                            <strong>{{ page.title }}</strong> - {{ page.classification }}
+                            [<a href="/page/{{ page.filename }}">View Page</a>]
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="sidebar">
+            <h2>Tools</h2>
+            <ul class="tools-list">
+                <li><a href="/schedule">Schedule Manager</a></li>
+                <li><a href="/surgery">手术排台</a></li>
+                <li><a href="#" onclick="alert('Coming soon!')">File Converter</a></li>
+                <li><a href="#" onclick="alert('Coming soon!')">Calculator</a></li>
+            </ul>
         </div>
     </div>
-    
-    {% if show_all_pages %}
-    <div class="all-pages">
-        <h2>All Articles</h2>
-        <ul>
-            {% for page in pages %}
-                <li>
-                    <strong>{{ page.title }}</strong> - {{ page.classification }}
-                    [<a href="/page/{{ page.filename }}">View Page</a>]
-                </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
     
     {{ footer }}
     <script src="/static/js/scripts.js"></script>

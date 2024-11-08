@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>日程管理系统</title>
+    <meta charset="utf-8">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .view-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .schedule-list {
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .schedule-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .schedule-item:last-child {
+            border-bottom: none;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            width: 400px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .modal h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        .form-section h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .modal button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+        }
+        .modal button:hover {
+            opacity: 0.9;
+        }
+        .danger-section {
+            background-color: #fff8f8;
+            border-color: #ffebeb;
+        }
+        .danger-button {
+            background-color: #dc3545;
+        }
+        .danger-button:hover {
+            background-color: #c82333;
+        }
+        .close-button {
+            background-color: #6c757d;
+        }
+        .warning-text {
+            color: #dc3545;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+        .schedule-actions {
+            margin-top: 10px;
+        }
+        
+        .schedule-actions button {
+            margin-right: 10px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .schedule-actions button.danger-button {
+            background-color: #dc3545;
+        }
+        
+        .schedule-actions button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>我的日程</h2>
+            <div>
+                <button onclick="showAccountModal()">账户管理</button>
+                <button onclick="logout()">退出登录</button>
+            </div>
+        </div>
+        
+        <div class="view-controls">
+            <div class="nav-buttons">
+                <button onclick="changePeriod('prev')">&lt;&lt;</button>
+                <span id="period-label"></span>
+                <button onclick="changePeriod('next')">&gt;&gt;</button>
+            </div>
+            <div>
+                <label><input type="radio" name="view" value="day" checked> 日视图</label>
+                <label><input type="radio" name="view" value="week"> 周视图</label>
+                <label><input type="radio" name="view" value="month"> 月视图</label>
+            </div>
+            <button onclick="showAddScheduleModal()">添加日程</button>
+        </div>
+
+        <div class="schedule-list" id="schedule-list">
+            <!-- 日程列表将在这里动态显示 -->
+        </div>
+    </div>
+
+    <!-- 添加日程模态框 -->
+    <div id="addScheduleModal" class="modal">
+        <div class="modal-content">
+            <h3>添加日程</h3>
+            <div class="form-section">
+                <div class="form-group">
+                    <label>标题:</label>
+                    <input type="text" id="scheduleTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>描述:</label>
+                    <input type="text" id="scheduleDescription">
+                </div>
+                <div class="form-group">
+                    <label>日期:</label>
+                    <input type="date" id="scheduleDate" required>
+                </div>
+                <div class="form-group">
+                    <label>时间:</label>
+                    <input type="time" id="scheduleTime" required>
+                </div>
+                <button onclick="addSchedule()">保存</button>
+                <button class="close-button" onclick="closeAddScheduleModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 账户管理模态框 -->
+    <div id="accountModal" class="modal">
+        <div class="modal-content">
+            <h3>账户管理</h3>
+            
+            <!-- 修改密码部分 -->
+            <div class="form-section">
+                <h4>修改密码</h4>
+                <div class="form-group">
+                    <input type="password" id="currentPassword" placeholder="当前密码">
+                </div>
+                <div class="form-group">
+                    <input type="password" id="newPassword" placeholder="新密码">
+                </div>
+                <div class="form-group">
+                    <input type="password" id="confirmPassword" placeholder="确认新密码">
+                </div>
+                <button onclick="changePassword()">修改密码</button>
+            </div>
+            
+            <!-- 删除账户部分 -->
+            <div class="form-section danger-section">
+                <h4>删除账户</h4>
+                <p class="warning-text">警告：此操作将永久删除您的账户和所有数据！</p>
+                <div class="form-group">
+                    <input type="password" id="deletePassword" placeholder="输入密码确认">
+                </div>
+                <button class="danger-button" onclick="deleteAccount()">删除账户</button>
+            </div>
+            
+            <button class="close-button" onclick="closeAccountModal()">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        // Check login status immediately when page loads
+        window.onload = function() {
+            const userId = localStorage.getItem('user_id');
+            if (!userId) {
+                window.location.href = '/schedule/login';
+                return;
+            }
+            // Add userId to URL without reloading page
+            const url = new URL(window.location.href);
+            url.searchParams.set('user_id', userId);
+            window.history.replaceState({}, '', url);
+            
+            // Load schedules and other initialization
+            loadSchedules();
+        };
+
+        let currentDate = new Date();
+        let currentView = 'day';
+
+        // 检查登录状态
+        function checkLogin() {
+            const userId = localStorage.getItem('user_id');
+            if (!userId) {
+                window.location.href = '/';
+            }
+            return userId;
+        }
+
+        // 加载日程数据
+        function loadSchedules() {
+            const userId = checkLogin();
+            const dateStr = currentDate.toISOString().split('T')[0];
+            
+            fetch(`/api/schedules?user_id=${userId}&view=${currentView}&date=${dateStr}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displaySchedules(data.schedules);
+                        updatePeriodLabel();
+                    } else {
+                        alert(data.message || '获取日程失败');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('获取日程失败');
+                });
+        }
+
+        // 显示日程列表
+        function displaySchedules(schedules) {
+            const container = document.getElementById('schedule-list');
+            container.innerHTML = '';
+            
+            schedules.forEach(schedule => {
+                const div = document.createElement('div');
+                div.className = 'schedule-item';
+                div.innerHTML = `
+                    <h3>${schedule.title}</h3>
+                    <p>${schedule.description}</p>
+                    <p>时间：${schedule.datetime}</p>
+                    <div class="schedule-actions">
+                        <button onclick="editSchedule(${schedule.id})">编辑</button>
+                        <button onclick="deleteSchedule(${schedule.id})" class="danger-button">删除</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // 更新时间段标签
+        function updatePeriodLabel() {
+            const label = document.getElementById('period-label');
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const date = currentDate.getDate();
+            
+            if (currentView === 'day') {
+                label.textContent = `${year}年${month}月${date}日`;
+            } else if (currentView === 'week') {
+                // 计算本周的开始和结束日期
+                const start = new Date(currentDate);
+                start.setDate(date - start.getDay() + 1);
+                const end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                label.textContent = `${start.getFullYear()}年${start.getMonth()+1}月${start.getDate()}日 - ${end.getMonth()+1}月${end.getDate()}日`;
+            } else {
+                label.textContent = `${year}年${month}月`;
+            }
+        }
+
+        // 切换时间段
+        function changePeriod(direction) {
+            if (currentView === 'day') {
+                currentDate.setDate(currentDate.getDate() + (direction === 'prev' ? -1 : 1));
+            } else if (currentView === 'week') {
+                currentDate.setDate(currentDate.getDate() + (direction === 'prev' ? -7 : 7));
+            } else {
+                currentDate.setMonth(currentDate.getMonth() + (direction === 'prev' ? -1 : 1));
+            }
+            loadSchedules();
+        }
+
+        // 切换视图
+        document.querySelectorAll('input[name="view"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                currentView = this.value;
+                loadSchedules();
+            });
+        });
+
+        // 退出登录
+        function logout() {
+            localStorage.removeItem('user_id');
+            window.location.href = '/schedule/login';
+        }
+
+        function showAccountModal() {
+            document.getElementById('accountModal').style.display = 'block';
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').style.display = 'none';
+        }
+
+        function changePassword() {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                alert('所有密码字段都必须填写');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                alert('新密码与确认密码不匹配');
+                return;
+            }
+
+            const data = new URLSearchParams();
+            data.append('user_id', localStorage.getItem('user_id'));
+            data.append('current_password', currentPassword);
+            data.append('new_password', newPassword);
+
+            fetch('/api/change_password', {
+                method: 'POST',
+                body: data
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('密码修改成功！');
+                    closeAccountModal();
+                } else {
+                    alert(data.message || '密码修改失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('密码修改失败');
+            });
+        }
+
+        function deleteAccount() {
+            const password = document.getElementById('deletePassword').value;
+            if (!password) {
+                alert('请输入密码确认');
+                return;
+            }
+
+            if (!confirm('警告：此操作将永久删除您的账户和所有数据！确定要继续吗？')) {
+                return;
+            }
+
+            if (!confirm('最后确认：真的要删除账户吗？此操作不可恢复！')) {
+                return;
+            }
+
+            const data = new URLSearchParams();
+            data.append('user_id', localStorage.getItem('user_id'));
+            data.append('password', password);
+
+            fetch('/api/delete_account', {
+                method: 'POST',
+                body: data
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('账户已成功删除');
+                    localStorage.removeItem('user_id');
+                    window.location.href = '/';
+                } else {
+                    alert(data.message || '账户删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('账户删除失败');
+            });
+        }
+
+        function showAddScheduleModal() {
+            document.getElementById('addScheduleModal').style.display = 'block';
+            // 默认设置为当前日期和时间
+            const now = new Date();
+            document.getElementById('scheduleDate').value = now.toISOString().split('T')[0];
+            document.getElementById('scheduleTime').value = now.toTimeString().slice(0,5);
+        }
+
+        function closeAddScheduleModal() {
+            document.getElementById('addScheduleModal').style.display = 'none';
+            // 重置表单
+            document.getElementById('scheduleTitle').value = '';
+            document.getElementById('scheduleDescription').value = '';
+            // 重置按钮
+            document.querySelector('#addScheduleModal h3').textContent = '添加日程';
+            const saveButton = document.querySelector('#addScheduleModal button');
+            saveButton.textContent = '保存';
+            saveButton.onclick = addSchedule;
+        }
+
+        function addSchedule() {
+            const title = document.getElementById('scheduleTitle').value;
+            const description = document.getElementById('scheduleDescription').value;
+            const date = document.getElementById('scheduleDate').value;
+            const time = document.getElementById('scheduleTime').value;
+
+            if (!title || !date || !time) {
+                alert('请填写必要字段');
+                return;
+            }
+
+            const data = new URLSearchParams();
+            data.append('user_id', localStorage.getItem('user_id'));
+            data.append('title', title);
+            data.append('description', description);
+            data.append('datetime', `${date} ${time}`);
+
+            fetch('/api/add_schedule', {
+                method: 'POST',
+                body: data
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('日程添加成功！');
+                    closeAddScheduleModal();
+                    loadSchedules();  // 刷新日程列表
+                } else {
+                    alert(data.message || '添加失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('添加失败');
+            });
+        }
+
+        // 添加编辑日程函数
+        function editSchedule(scheduleId) {
+            // 找到对应的日程数据
+            const schedules = document.querySelectorAll('.schedule-item');
+            let scheduleData;
+            schedules.forEach(item => {
+                if (item.querySelector('button').getAttribute('onclick').includes(scheduleId)) {
+                    scheduleData = {
+                        title: item.querySelector('h3').textContent,
+                        description: item.querySelector('p').textContent,
+                        datetime: item.querySelectorAll('p')[1].textContent.replace('时间：', '')
+                    };
+                }
+            });
+
+            // 填充表单
+            document.getElementById('scheduleTitle').value = scheduleData.title;
+            document.getElementById('scheduleDescription').value = scheduleData.description;
+            const [date, time] = scheduleData.datetime.trim().split(' ');
+            document.getElementById('scheduleDate').value = date;
+            document.getElementById('scheduleTime').value = time;
+
+            // 修改模态框标题和按钮
+            document.querySelector('#addScheduleModal h3').textContent = '编辑日程';
+            const saveButton = document.querySelector('#addScheduleModal button');
+            saveButton.textContent = '保存修改';
+            saveButton.onclick = () => updateSchedule(scheduleId);
+
+            // 显示模态框
+            showAddScheduleModal();
+        }
+
+        // 添加更新日程函数
+        function updateSchedule(scheduleId) {
+            const title = document.getElementById('scheduleTitle').value;
+            const description = document.getElementById('scheduleDescription').value;
+            const date = document.getElementById('scheduleDate').value;
+            const time = document.getElementById('scheduleTime').value;
+
+            if (!title || !date || !time) {
+                alert('请填写必要字段');
+                return;
+            }
+
+            const data = new URLSearchParams();
+            data.append('schedule_id', scheduleId);
+            data.append('user_id', localStorage.getItem('user_id'));
+            data.append('title', title);
+            data.append('description', description);
+            data.append('datetime', `${date} ${time}`);
+
+            fetch('/api/edit_schedule', {
+                method: 'POST',
+                body: data
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('日程更新成功！');
+                    closeAddScheduleModal();
+                    loadSchedules();
+                } else {
+                    alert(data.message || '更新失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('更新失败');
+            });
+        }
+
+        // 添加删除日程函数
+        function deleteSchedule(scheduleId) {
+            if (!confirm('确定要删除这个日程吗？')) {
+                return;
+            }
+
+            const data = new URLSearchParams();
+            data.append('schedule_id', scheduleId);
+            data.append('user_id', localStorage.getItem('user_id'));
+
+            fetch('/api/delete_schedule', {
+                method: 'POST',
+                body: data
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('日程删除成功！');
+                    loadSchedules();
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('删除失败');
+            });
+        }
+    </script>
+</body>
+</html> 

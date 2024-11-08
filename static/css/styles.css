@@ -630,3 +630,71 @@ img {
 .articles-list li:hover {
     background-color: #f8f9fa;
 }
+
+/* Add these new styles for the sidebar */
+.main-container {
+    display: flex;
+    gap: 20px;
+    max-width: 1400px;  /* Increased to accommodate sidebar */
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+.content-area {
+    flex: 1;
+    min-width: 0;  /* Prevents flex items from overflowing */
+}
+
+.sidebar {
+    width: 250px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    height: fit-content;
+}
+
+.sidebar h2 {
+    color: #4a90e2;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+    text-align: left;
+}
+
+.tools-list {
+    list-style: none;
+    padding: 0;
+}
+
+.tools-list li {
+    margin: 10px 0;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.tools-list li:hover {
+    background: #e9ecef;
+}
+
+.tools-list a {
+    color: #333;
+    text-decoration: none;
+    display: block;
+}
+
+.tools-list a:hover {
+    color: #4a90e2;
+}
+
+/* Responsive design for sidebar */
+@media (max-width: 1024px) {
+    .main-container {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+    }
+}
