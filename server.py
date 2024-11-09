@@ -15,6 +15,9 @@ import csv
 import io
 import shutil
 import zipfile
+import logging
+from logging.handlers import RotatingFileHandler
+import traceback
 
 PORT = 8000
 
@@ -36,6 +39,16 @@ SCHEDULE_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'schedule
 # Add these constants at the top of the file
 SURGERY_USERNAME = "2466"
 SURGERY_PASSWORD = "2466"
+
+# Configure logging
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.log')
+logging.basicConfig(
+    handlers=[RotatingFileHandler(LOG_FILE, maxBytes=1024*1024, backupCount=5)],
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Function to parse front matter
 def parse_front_matter(content):
@@ -908,6 +921,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         self.respond_with_html(html_content)
 
     def handle_schedule_login(self):
+        logger.info("Schedule login attempt")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         data = parse_qs(post_data)
@@ -1124,8 +1138,16 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(html_content.encode('utf-8'))
 
     def log_message(self, format, *args):
-        # Override to prevent printing to stderr on each request
-        return
+        # Override to log to our log file instead of stderr
+        logger.info(f"{self.address_string()} - {format%args}")
+
+    def log_error(self, format, *args):
+        # Override to log errors to our log file
+        logger.error(f"{self.address_string()} - {format%args}")
+
+    def handle_error(self, request, client_address):
+        # Log unhandled exceptions
+        logger.error(f"Error processing request from {client_address}:\n{traceback.format_exc()}")
 
     # Add this method to the IntranetHandler class
     def send_file(self, filename):
@@ -1213,6 +1235,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             conn.close()
 
     def handle_add_surgery(self):
+        logger.info("Adding new surgery")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         data = json.loads(post_data)
@@ -1272,6 +1295,9 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             })
             return
         
+        # Log the surgery edit attempt with the actual ID from the request
+        logger.info(f"Editing surgery ID: {data['ID']}")
+        
         required_fields = ['Date', 'BedNumber', 'PatientName', 'Gender', 'Age', 
                             'HospitalNumber', 'Diagnosis', 'Operation', 'MainSurgeon', 
                             'Assistant', 'AnesthesiaDoctor', 'AnesthesiaType', 
@@ -1316,6 +1342,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                 'message': '手术安排已更新'
             })
         except Exception as e:
+            logger.error(f"Error editing surgery ID {data['ID']}: {str(e)}")
             self.send_json({
                 'success': False,
                 'message': str(e)
@@ -1324,6 +1351,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             conn.close()
 
     def handle_delete_surgery(self):
+        logger.info("Deleting surgery")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         data = json.loads(post_data)
@@ -1485,6 +1513,7 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
             conn.close()
 
     def handle_surgery_login(self):
+        logger.info("Surgery login attempt")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         data = json.loads(post_data)
@@ -1541,25 +1570,36 @@ class ThreadedHTTPServer(ThreadingMixIn, socketserver.TCPServer):
 
 # Add this at the bottom of the file, just before the if __name__ == '__main__': block
 def init():
-    # Create necessary directories
-    os.makedirs(PAGES_DIR, exist_ok=True)
-    os.makedirs(MESSAGES_DIR, exist_ok=True)
-    
-    # Initialize schedule database
+    logger.info("Starting server initialization...")
     try:
-        init_schedule_db()
-        print("Schedule database initialized successfully")
+        # Create necessary directories
+        os.makedirs(PAGES_DIR, exist_ok=True)
+        logger.info(f"Created/verified pages directory: {PAGES_DIR}")
+        os.makedirs(MESSAGES_DIR, exist_ok=True)
+        logger.info(f"Created/verified messages directory: {MESSAGES_DIR}")
+        
+        # Initialize schedule database
+        try:
+            init_schedule_db()
+            logger.info("Schedule database initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing schedule database: {str(e)}\n{traceback.format_exc()}")
+            raise
     except Exception as e:
-        print(f"Error initializing schedule database: {e}")
+        logger.error(f"Error during initialization: {str(e)}\n{traceback.format_exc()}")
+        raise
 
 # Update the if __name__ == '__main__': block
 if __name__ == '__main__':
-    init()
     try:
+        init()
         with ThreadedHTTPServer(("", PORT), IntranetHandler) as httpd:
-            print(f"Server started at port {PORT}")
-            print("Press Ctrl+C to stop the server")
+            logger.info(f"Server started at port {PORT}")
+            logger.info("Press Ctrl+C to stop the server")
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
+        logger.info("\nShutting down server...")
         httpd.server_close()
+    except Exception as e:
+        logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
+        raise
