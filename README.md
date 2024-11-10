@@ -61,6 +61,6 @@ Feel free to open issues or submit pull requests if you have suggestions for imp
 
 - v1.4.1 2024-11-07: Fixed the bug that classification menu is not working.
 
-- v1.5 2024-11-08: Added a "Tools" sidebar on the home page; added a surgery scheduling system and a Schedule management system.
+- v1.5 2024-11-08: Added a "Tools" sidebar on the home page; added a surgery scheduling system and a Schedule management system.2024-11-10 update: you can get more function for database management if you used the standalone version of [surgery scheduling system](https://github.com/gouliming4437/SurgerySchedulingSystem); You can link to that standalone system by adding a href link to 手术排台 in this system after you run the standalone version.
 
 - v1.5.1 2024-11-09: Created a new log file to record the activity and the error message of the server. 
