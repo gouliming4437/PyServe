@@ -1157,7 +1157,10 @@ class IntranetHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Handle template variables for login page
                 if filename.endswith('login.html'):
-                    content = content.replace('{{ request_path }}', self.path)
+                    # Check if it's surgery or schedule login
+                    is_surgery = 'surgery' in self.path
+                    title = '手术排台系统' if is_surgery else '日程管理系统'
+                    content = content.replace("{{ '手术排台系统' if 'surgery' in request_path else '日程管理系统' }}", title)
                 
                 self.send_response(200)
                 if filename.endswith('.html'):
